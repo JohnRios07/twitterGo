@@ -9,6 +9,8 @@ import (
 	lambda "github.com/aws/aws-lambda-go/lambda"
 
 	"github.com/johnrios07/twitterGo/awsgo"
+	"github.com/johnrios07/twitterGo/bd"
+	"github.com/johnrios07/twitterGo/handlers"
 	"github.com/johnrios07/twitterGo/models"
 	"github.com/johnrios07/twitterGo/secretmanager"
 )
@@ -57,7 +59,33 @@ func EjecutoLambda(ctx context.Context, request events.APIGatewayProxyRequest) (
 	awsgo.Ctx = context.WithValue(awsgo.Ctx, models.Key("body"), request.Body)
 	awsgo.Ctx = context.WithValue(awsgo.Ctx, models.Key("bucketName"), os.Getenv("BucketName"))
 
-	return resp, nil
+	// Chequeo conexion a la BD o conecto a la BD
+	err = bd.ConectarBD(awsgo.Ctx)
+	if err != nil {
+		resp = &events.APIGatewayProxyResponse{
+			StatusCode: 500,
+			Body:       "Error conectando a la BD " + err.Error(),
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+		}
+		return resp, nil
+	}
+
+	respApi := handlers.Manejadores(awsgo.Ctx, request)
+
+	if respApi.CustomResp == nil {
+		resp = &events.APIGatewayProxyResponse{
+			StatusCode: respApi.Status,
+			Body:       respApi.Message,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+		}
+		return resp, nil
+	} else {
+		return respApi.CustomResp, nil
+	}
 }
 
 func Validoparametros() bool {
